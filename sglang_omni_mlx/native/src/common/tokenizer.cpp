@@ -7,33 +7,12 @@
 
 #include <algorithm>
 #include <array>
-#include <fstream>
 #include <limits>
-#include <sstream>
 #include <stdexcept>
-
-#include "nlohmann/json.hpp"
 
 namespace qwen3_asr {
 
 namespace {
-
-// Note (Jiaxin Deng): Qwen2's pre-tokenization split, verbatim from the
-// checkpoint's tokenizer.
-constexpr const char *kQwen2SplitPattern =
-    R"((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N})"
-    R"(| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+)";
-
-std::string ReadFile(const std::filesystem::path &path) {
-  std::ifstream stream(path, std::ios::binary);
-  if (!stream) {
-    throw std::runtime_error("cannot read " + path.string());
-  } else {
-  }
-  std::ostringstream contents;
-  contents << stream.rdbuf();
-  return contents.str();
-}
 
 void AppendUtf8(uint32_t code_point, std::string &out) {
   if (code_point < 0x80) {
@@ -216,59 +195,16 @@ struct Tokenizer::Pcre2Regex {
 
 Tokenizer::Tokenizer(const std::filesystem::path &model_directory)
     : split_pattern_(std::make_unique<Pcre2Regex>()) {
-  const nlohmann::json vocabulary =
-      nlohmann::json::parse(ReadFile(model_directory / "vocab.json"));
-  for (const auto &[token, id] : vocabulary.items()) {
-    vocabulary_.emplace(token, id.get<int>());
-  }
-  std::istringstream merges(ReadFile(model_directory / "merges.txt"));
-  std::string line;
-  int rank = 0;
-  while (std::getline(merges, line)) {
-    if (line.rfind("#version", 0) == 0 || line.empty()) {
-      continue;
-    } else {
-    }
-    merge_ranks_.emplace(line, rank++);
-  }
-  const nlohmann::json config = nlohmann::json::parse(
-      ReadFile(model_directory / "tokenizer_config.json"));
-  if (config.contains("added_tokens_decoder")) {
-    for (const auto &[id_text, token] :
-         config.at("added_tokens_decoder").items()) {
-      const int id = std::stoi(id_text);
-      added_token_index_by_id_[id] = added_tokens_.size();
-      added_tokens_.push_back({token.at("content").get<std::string>(), id,
-                               token.at("special").get<bool>()});
-    }
-  } else {
-    // Note (Dayuxiaoshui): newer checkpoints, MOSS-Transcribe-Diarize's among
-    // them, list their added tokens only in tokenizer.json.
-    const nlohmann::json tokenizer =
-        nlohmann::json::parse(ReadFile(model_directory / "tokenizer.json"));
-    for (const auto &token : tokenizer.at("added_tokens")) {
-      const int id = token.at("id").get<int>();
-      added_token_index_by_id_[id] = added_tokens_.size();
-      added_tokens_.push_back({token.at("content").get<std::string>(), id,
-                               token.at("special").get<bool>()});
-    }
-  }
-  size_t largest_id = 0;
-  for (const auto &[token, id] : vocabulary_)
-    largest_id = std::max(largest_id, static_cast<size_t>(id));
-  for (const auto &added : added_tokens_)
-    largest_id = std::max(largest_id, static_cast<size_t>(added.id));
-  tokens_by_id_.resize(largest_id + 1);
-  for (const auto &[token, id] : vocabulary_)
-    tokens_by_id_[id] = token;
+  const std::string split_pattern = LoadVocabulary(model_directory);
 
   int error_code = 0;
   PCRE2_SIZE error_offset = 0;
-  split_pattern_->code = pcre2_compile(
-      reinterpret_cast<PCRE2_SPTR>(kQwen2SplitPattern), PCRE2_ZERO_TERMINATED,
-      PCRE2_UTF | PCRE2_UCP, &error_code, &error_offset, nullptr);
+  split_pattern_->code =
+      pcre2_compile(reinterpret_cast<PCRE2_SPTR>(split_pattern.c_str()),
+                    PCRE2_ZERO_TERMINATED, PCRE2_UTF | PCRE2_UCP, &error_code,
+                    &error_offset, nullptr);
   if (split_pattern_->code == nullptr) {
-    throw std::runtime_error("cannot compile the Qwen2 split pattern");
+    throw std::runtime_error("cannot compile the tokenizer split pattern");
   } else {
   }
 }

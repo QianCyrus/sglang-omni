@@ -18,6 +18,7 @@ from sglang_omni.models.ming3_asr.preprocessing import (
     Ming3ASRPreprocessor,
     TranscriptionState,
     extract_transcript,
+    resolve_eos_token_ids,
 )
 from sglang_omni.modules.ming_audio.audio_encoder import (
     AudioEncoderConfig,
@@ -62,9 +63,10 @@ def create_preprocessing_executor(model_path: str) -> SimpleScheduler:
     # note (Codex): the checkpoint's tokenizer class only adds chat helpers
     # to the fast tokenizer, so the fast tokenizer encodes identically.
     preprocessor = Ming3ASRPreprocessor(
-        PreTrainedTokenizerFast.from_pretrained(model_path),
-        AudioEncoderConfig.model_validate(configuration["audio_config"]),
-        configuration["text_config"]["hidden_size"],
+        tokenizer=PreTrainedTokenizerFast.from_pretrained(model_path),
+        audio_config=AudioEncoderConfig.model_validate(configuration["audio_config"]),
+        hidden_size=configuration["text_config"]["hidden_size"],
+        audio_token_id=configuration["audio_token_id"],
     )
     return SimpleScheduler(preprocessor)
 
@@ -136,7 +138,9 @@ def create_thinker_executor(
         )
     )
     tokenizer = PreTrainedTokenizerFast.from_pretrained(model_path)
-    end_token_id = load_checkpoint_config(model_path)["text_config"]["eos_token_id"]
+    checkpoint_configuration = load_checkpoint_config(model_path)
+    checkpoint_eos_token_id = checkpoint_configuration["text_config"]["eos_token_id"]
+    eos_token_ids = resolve_eos_token_ids(checkpoint_eos_token_id, tokenizer)
 
     def build_request(payload: StagePayload) -> SGLangARRequestData:
         state: TranscriptionState = payload.data
@@ -157,7 +161,7 @@ def create_thinker_executor(
             origin_input_ids=state["input_ids"].tolist(),
             sampling_params=sampling,
             vocab_size=model_config.vocab_size,
-            eos_token_ids={end_token_id},
+            eos_token_ids=eos_token_ids,
         )
         return SGLangARRequestData(
             input_ids=state["input_ids"],

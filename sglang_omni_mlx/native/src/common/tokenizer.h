@@ -12,7 +12,7 @@ namespace qwen3_asr {
 
 class Tokenizer {
 public:
-  // Reads vocab.json, merges.txt and tokenizer_config.json from the checkpoint.
+  // Reads byte-level BPE from vocab.json/merges.txt or tokenizer.json.
   explicit Tokenizer(const std::filesystem::path &model_directory);
   ~Tokenizer();
   Tokenizer(const Tokenizer &) = delete;
@@ -33,6 +33,7 @@ private:
   };
   struct Pcre2Regex;
 
+  std::string LoadVocabulary(const std::filesystem::path &model_directory);
   void EncodeOrdinary(const std::string &text, std::vector<int> &ids) const;
   void EncodeWord(const std::string &byte_level_word,
                   std::vector<int> &ids) const;

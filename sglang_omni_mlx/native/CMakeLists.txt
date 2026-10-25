@@ -52,7 +52,8 @@ add_library(common STATIC
   src/common/form.cpp
   src/common/layers.cpp
   src/common/npz.cpp
-  src/common/tokenizer.cpp)
+  src/common/tokenizer.cpp
+  src/common/tokenizer_checkpoint.cpp)
 target_include_directories(common PUBLIC src)
 target_link_libraries(common PUBLIC mlx nlohmann_json::nlohmann_json pcre2-8-static
   "-framework CoreFoundation")
@@ -230,3 +231,23 @@ set_target_properties(voxtral_tts_server voxtral_tts_synthesize PROPERTIES
   BUILD_RPATH "${MLX_LIBRARY_DIRS};@loader_path"
   INSTALL_RPATH "@loader_path")
 install(TARGETS voxtral_tts_server voxtral_tts_synthesize RUNTIME DESTINATION bin)
+
+add_library(ming3_asr STATIC
+  src/ming3_asr/ming3_asr_model.cpp
+  src/ming3_asr/ming3_asr_audio.cpp
+  src/ming3_asr/ming3_asr_attention.cpp
+  src/ming3_asr/ming3_asr_delta.cpp
+  src/ming3_asr/ming3_asr_moe.cpp
+  src/ming3_asr/ming3_asr_transcriber.cpp)
+target_link_libraries(ming3_asr PUBLIC qwen3_asr)
+target_compile_options(ming3_asr PRIVATE -Wall -Wextra)
+add_executable(ming3_asr_server src/ming3_asr/ming3_asr_server.cpp)
+target_link_libraries(ming3_asr_server PRIVATE ming3_asr asr_service)
+add_executable(ming3_asr_transcribe tools/ming3_asr_transcribe.cpp)
+target_link_libraries(ming3_asr_transcribe PRIVATE ming3_asr)
+add_executable(ming3_asr_probe tools/ming3_asr_probe.cpp)
+target_link_libraries(ming3_asr_probe PRIVATE ming3_asr)
+set_target_properties(ming3_asr_server ming3_asr_transcribe ming3_asr_probe PROPERTIES
+  BUILD_RPATH "${MLX_LIBRARY_DIRS};@loader_path"
+  INSTALL_RPATH "@loader_path")
+install(TARGETS ming3_asr_server ming3_asr_transcribe ming3_asr_probe RUNTIME DESTINATION bin)

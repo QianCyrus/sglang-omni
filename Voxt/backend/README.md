@@ -39,8 +39,24 @@ Voxt/backend/run_omni_dev.sh run
 `moss_transcribe_diarize_server`, `moss_transcribe`, `nemotron_asr_server`,
 `nemotron_transcribe`, `parakeet_server`, `parakeet_transcribe`,
 `sensevoice_server`, `sensevoice_transcribe`, `voxtral_tts_server`,
-`voxtral_tts_synthesize`, and the pinned MLX library
+`voxtral_tts_synthesize`, `ming3_asr_server`, `ming3_asr_transcribe`,
+`ming3_asr_probe`, and the pinned MLX library
 and Metal kernels next to them.
+
+Ming-3.0 ASR is available as a standalone native server; this change does not add it to Voxt's model picker. Use the converted `mlx-community/Ming-3.0-asr-tiny-4bit` checkpoint, not the original PyTorch weights:
+
+```bash
+<runtime>/bin/ming3_asr_server --model-path <ming-mlx-checkpoint> --port 8000
+<runtime>/bin/ming3_asr_transcribe --model-path <ming-mlx-checkpoint> --language en speech.wav
+```
+
+Its `/v1/audio/transcriptions` endpoint accepts 16 kHz mono PCM16 or float32 WAV, optional `language=en|zh` (automatic detection when omitted), `max_new_tokens` (default 256), `no_repeat_ngram_size` (default 10), `temperature=0`, `stream`, and `include_generation_metadata`. SSE delivers the completed transcript, not incremental audio streaming. Audio is encoded in independent 30-second chunks and decoded within the checkpoint's 8192-token context budget. Over-budget or nonfinite audio is rejected before admission to the worker. Timestamps, speculative MTP, stochastic sampling and `/v1/realtime` are not supported.
+
+The Ming reference is Python MLX Audio commit `402e3b9e4bd9bbecedc917b290896e5588c76f58` on MLX `0.32.3`, using the same checkpoint revision pinned in `ci/model_pins.json`. `ci/ming3_reference.py` records the 392-clip reference results and `ci/ming3_parity.py` compares frontend, decoder and cache tensors with `ming3_asr_probe`. These Python tools are validation-only; the deployed server has no Python dependency.
+
+The additional automatic-language golden covers all 33 corpus clips longer than 30 seconds, without a language hint; its text and generation metadata also match the reference exactly. Server tests cover JSON/SSE, invalid and nonfinite audio, context limits, cancellation, startup failures, and the absence of realtime support. Low-level tests compare the KDA recurrence with a NumPy implementation and verify carried state and both tokenizer checkpoint layouts.
+
+On Apple M5, all 392 corpus clips match the reference's text, language, generated-token count and finish reason. English WER is 4.818%, Chinese CER 19.127%, and mixed MER 8.226% for both implementations. The local native golden is recorded in `ci/model_golden/ming3-asr-tiny-4bit.json`; a remote Mac CI run still needs to validate its runner's outputs. Over 5225.305 seconds of audio, the recorded reference/native runs take 365.406/780.014 seconds (RTF 0.070/0.149), with peak MLX allocation of 6211 MiB for the reference and 5980 MiB for native, and model load time 1.118/0.850–1.254 seconds. These are separate local runs, not a controlled speedup measurement; the native path does not claim a performance improvement over the reference.
 
 "Voxt Omni Dev" has its own bundle identifier. It runs without the sandbox so it
 can start the runtime, and it sees `~/.voxt-omni-dev` as its home, so its

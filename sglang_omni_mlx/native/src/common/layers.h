@@ -36,6 +36,10 @@ public:
   bool Has(const std::string &name) const;
   mlx::core::array Linear(const mlx::core::array &x,
                           const std::string &prefix) const;
+  mlx::core::array GatherLinear(const mlx::core::array &input,
+                                const std::string &prefix,
+                                const mlx::core::array &indices,
+                                bool sorted_indices = false) const;
   mlx::core::array LayerNorm(const mlx::core::array &x,
                              const std::string &prefix, float eps) const;
   mlx::core::array RmsNorm(const mlx::core::array &x, const std::string &prefix,

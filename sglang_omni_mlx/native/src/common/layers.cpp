@@ -131,6 +131,26 @@ mx::array Checkpoint::Linear(const mx::array &x,
   }
 }
 
+mx::array Checkpoint::GatherLinear(const mx::array &input,
+                                   const std::string &prefix,
+                                   const mx::array &indices,
+                                   bool sorted_indices) const {
+  if (Has(prefix + ".scales")) {
+    const std::optional<mx::array> biases =
+        Has(prefix + ".biases")
+            ? std::optional<mx::array>(Weight(prefix + ".biases"))
+            : std::nullopt;
+    return mx::gather_qmm(
+        input, Weight(prefix + ".weight"), Weight(prefix + ".scales"), biases,
+        std::nullopt, indices, true, quantization_.group_size,
+        quantization_.bits, quantization_.mode, std::nullopt, sorted_indices);
+  } else {
+    return mx::gather_mm(input,
+                         mx::swapaxes(Weight(prefix + ".weight"), -1, -2),
+                         std::nullopt, indices, sorted_indices);
+  }
+}
+
 mx::array Checkpoint::LayerNorm(const mx::array &x, const std::string &prefix,
                                 float eps) const {
   return mx::fast::layer_norm(x, Weight(prefix + ".weight"),

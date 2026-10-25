@@ -46,7 +46,7 @@ def build_transcription_prompt(
     elif "\n" in context or "\r" in context:
         raise ValueError("Ming 3 ASR request: prompt must not contain newlines")
     else:
-        instruction = ASR_INSTRUCTION + context
+        instruction = ASR_INSTRUCTION + " " + context
     if language is None:
         answer_prefix = ""
     elif language in LANGUAGE_LABELS:
@@ -80,17 +80,42 @@ def extract_transcript(generated_text: str) -> str:
     return text
 
 
+def resolve_eos_token_ids(
+    checkpoint_eos_token_id: int, tokenizer: PreTrainedTokenizerBase
+) -> set[int]:
+    """Return both EOS IDs emitted by Ming checkpoints and tokenizers."""
+    tokenizer_eos_token_id = tokenizer.eos_token_id
+    if not isinstance(tokenizer_eos_token_id, int):
+        raise ValueError("Ming 3 ASR tokenizer must define one integer eos_token_id")
+    else:
+        pass
+    return {checkpoint_eos_token_id, tokenizer_eos_token_id}
+
+
 class Ming3ASRPreprocessor:
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerBase,
         audio_config: AudioEncoderConfig,
         hidden_size: int,
+        audio_token_id: int,
     ) -> None:
         self.tokenizer: PreTrainedTokenizerBase = tokenizer
         self.audio_config: AudioEncoderConfig = audio_config
         self.hidden_size: int = hidden_size
-        self.audio_token_id: int = tokenizer.convert_tokens_to_ids(AUDIO_PATCH_TOKEN)
+        tokenizer_audio_token_id = tokenizer.convert_tokens_to_ids(AUDIO_PATCH_TOKEN)
+        if AUDIO_PATCH_TOKEN not in tokenizer.get_vocab():
+            raise ValueError(
+                "Ming 3 ASR tokenizer is missing the <audioPatch> token"
+            )
+        elif tokenizer_audio_token_id != audio_token_id:
+            raise ValueError(
+                "Ming 3 ASR audio token ID mismatch: "
+                f"tokenizer={tokenizer_audio_token_id}, checkpoint={audio_token_id}"
+            )
+        else:
+            pass
+        self.audio_token_id: int = audio_token_id
 
     def __call__(self, payload: StagePayload) -> StagePayload:
         raw_inputs = payload.request.inputs

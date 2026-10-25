@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from test_server_api import (
+from server_fixture import (
     DATA_ROOT,
     RUNTIME_BIN,
     Server,
